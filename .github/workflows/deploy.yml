@@ -1,0 +1,51 @@
+name: Deploy to home server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  DEPLOY_DIR: F:\Learn\datdofishing-be
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, datdo-server]
+    timeout-minutes: 60
+    steps:
+      - name: Kéo code mới
+        shell: pwsh
+        run: |
+          Set-Location "$env:DEPLOY_DIR"
+          git pull --ff-only origin main
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Kiểm tra .env
+        shell: pwsh
+        run: |
+          Set-Location "$env:DEPLOY_DIR"
+          if (-not (Test-Path .env)) { Write-Error "Thiếu file .env trên server"; exit 1 }
+
+      - name: Build và chạy lại stack
+        shell: pwsh
+        run: |
+          Set-Location "$env:DEPLOY_DIR"
+          docker compose --profile apps up -d --build --remove-orphans
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Kiểm tra gateway
+        shell: pwsh
+        run: |
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8080/api/catalog/products -TimeoutSec 5
+              if ($r.StatusCode -eq 200) { Write-Host "Gateway OK"; exit 0 }
+            } catch { }
+            Start-Sleep -Seconds 10
+          }
+          Write-Error "Gateway không phản hồi sau 5 phút"
+          exit 1
