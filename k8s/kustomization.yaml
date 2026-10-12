@@ -1,0 +1,10 @@
+# Triển khai toàn bộ lên Kubernetes của Docker Desktop:
+#   kubectl apply -k k8s
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: datdofishing
+resources:
+  - namespace.yaml
+  - infra
+  - apps
+  - ingress.yaml

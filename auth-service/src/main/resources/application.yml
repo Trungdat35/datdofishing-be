@@ -1,0 +1,59 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/auth_db?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&characterEncoding=utf8
+    username: auth_user
+    password: auth_pass
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+      # lưu mọi thời điểm theo UTC (Instant)
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9094}
+    producer:
+      acks: all
+
+datdofishing:
+  outbox:
+    enabled: true
+  kafka:
+    create-topics: true
+  jwt:
+    issuer: datdofishing-auth
+    access-ttl: 15m
+    refresh-ttl: 7d
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+  admin:
+    email: ${ADMIN_EMAIL:admin@datdofishing.local}
+    password: ${ADMIN_PASSWORD:Admin@123}
+    full-name: Quản trị viên
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

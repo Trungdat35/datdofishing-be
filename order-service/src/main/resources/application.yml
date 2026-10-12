@@ -1,0 +1,63 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/order_db?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&characterEncoding=utf8
+    username: order_user
+    password: order_pass
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+      # lưu mọi thời điểm theo UTC (Instant)
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9094}
+    producer:
+      acks: all
+    consumer:
+      # 3 instance cùng group -> Kafka chia 3 partition cho 3 instance
+      group-id: order-service
+      auto-offset-reset: earliest
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8081/.well-known/jwks.json}
+
+datdofishing:
+  instance-id: ${INSTANCE_ID:${HOSTNAME:order-local}}
+  outbox:
+    enabled: true
+  kafka:
+    create-topics: true
+  catalog-url: ${CATALOG_URL:http://localhost:8082}
+  promotion-url: ${PROMOTION_URL:http://localhost:8086}
+  order:
+    free-shipping-from: 500000
+    shipping-fee: 30000
+    pending-timeout-minutes: 15
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

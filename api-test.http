@@ -1,0 +1,144 @@
+### DatDo Fishing - thử API qua gateway (IntelliJ HTTP Client / VS Code REST Client)
+@api = http://localhost:8080
+
+### 1. Đăng ký khách hàng (xem email ở http://localhost:8025)
+# @name register
+POST {{api}}/api/auth/register
+Content-Type: application/json
+
+{"email": "khach1@test.vn", "password": "12345678", "fullName": "Nguyễn Văn A", "phone": "0912345678"}
+
+### 2. Đăng nhập khách hàng
+# @name login
+POST {{api}}/api/auth/login
+Content-Type: application/json
+
+{"email": "khach1@test.vn", "password": "12345678"}
+
+> {% client.global.set("token", response.body.accessToken); client.global.set("refresh", response.body.refreshToken); %}
+
+### 3. Đăng nhập admin
+# @name adminLogin
+POST {{api}}/api/admin/auth/login
+Content-Type: application/json
+
+{"email": "admin@datdofishing.local", "password": "Admin@123"}
+
+> {% client.global.set("adminToken", response.body.accessToken); %}
+
+### 4. Danh mục (công khai)
+GET {{api}}/api/catalog/categories
+
+### 5. Sản phẩm cần câu đài, giá tăng dần
+GET {{api}}/api/catalog/products?category=can-cau-dai&sort=price_asc
+
+### 6. Chi tiết sản phẩm
+GET {{api}}/api/catalog/products/can-cau-dai-v5-big-fish
+
+### 7. Tồn kho (còn hàng / sắp hết / hết hàng)
+GET {{api}}/api/inventory/stock?variantIds=1,4,11
+
+### 8. Flash sale đang chạy
+GET {{api}}/api/promotions/flash-sales/current
+
+### 9. Thêm vào giỏ
+POST {{api}}/api/cart/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"variantId": 4, "quantity": 1}
+
+### 10. Xem giỏ
+GET {{api}}/api/cart
+Authorization: Bearer {{token}}
+
+### 11. Đặt hàng (chạy 2 lần với cùng Idempotency-Key -> chỉ 1 đơn)
+POST {{api}}/api/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: test-001
+
+{
+  "items": [{"variantId": 4, "quantity": 1}, {"variantId": 12, "quantity": 2}],
+  "shipping": {"recipientName": "Nguyễn Văn A", "phone": "0912345678", "address": "Số 1 Hà Đông, Hà Nội"},
+  "note": "Giao giờ hành chính"
+}
+
+### 12. Đặt hàng khi chưa đăng nhập -> 401
+POST {{api}}/api/orders
+Content-Type: application/json
+
+{"items": [{"variantId": 1, "quantity": 1}], "shipping": {"recipientName": "A", "phone": "0912345678", "address": "HN"}}
+
+### 13. Đơn của tôi (sau vài giây trạng thái thành CONFIRMED)
+GET {{api}}/api/orders
+Authorization: Bearer {{token}}
+
+### 14. Instance nào xử lý (chạy nhiều lần để thấy round-robin)
+GET {{api}}/api/orders/instance
+Authorization: Bearer {{token}}
+
+### 15. Đặt hàng sản phẩm hết hàng (variant 11) -> đơn bị CANCELLED
+POST {{api}}/api/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"items": [{"variantId": 11, "quantity": 1}], "shipping": {"recipientName": "A", "phone": "0912345678", "address": "HN"}}
+
+### 16. Admin: danh sách đơn
+GET {{api}}/api/admin/orders
+Authorization: Bearer {{adminToken}}
+
+### 17. Admin: chuyển trạng thái đơn (thay mã đơn)
+PATCH {{api}}/api/admin/orders/DD261007-XXXXXX/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"status": "SHIPPING", "note": "Đã giao cho đơn vị vận chuyển"}
+
+### 18. Admin: tạo sản phẩm với ảnh URL
+POST {{api}}/api/admin/catalog/products
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Cần câu đài V5 Big Fish bản mới",
+  "categoryId": 1,
+  "brandId": 1,
+  "shortDescription": "Bản nâng cấp",
+  "hot": true,
+  "variants": [
+    {"sku": "V5-BF2-36", "name": "3m6", "price": 1290000, "compareAtPrice": 1500000},
+    {"sku": "V5-BF2-45", "name": "4m5", "price": 1390000}
+  ],
+  "images": [
+    {"url": "https://bizweb.dktcdn.net/thumb/medium/100/436/612/products/can-cau-dai-v5-big-fish-cac-kich-thuoc.jpg?v=1740132741173", "thumbnail": true}
+  ]
+}
+
+### 19. Admin: nhập kho cho biến thể mới (thay variantId)
+PUT {{api}}/api/admin/inventory/10001
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"quantity": 30, "lowStockThreshold": 5}
+
+### 20. Bài viết kinh nghiệm
+GET {{api}}/api/content/articles
+
+### 21. Thông báo của tôi
+GET {{api}}/api/notifications
+Authorization: Bearer {{token}}
+
+### 22. Làm mới token
+POST {{api}}/api/auth/refresh
+Content-Type: application/json
+
+{"refreshToken": "{{refresh}}"}
+
+### 23. Đăng xuất (access token bị chặn ngay ở gateway)
+POST {{api}}/api/auth/logout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"refreshToken": "{{refresh}}"}

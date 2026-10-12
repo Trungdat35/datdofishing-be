@@ -1,0 +1,11 @@
+# Kubernetes: Service "order-service" tự chia tải giữa các pod nên chỉ cần 1 địa chỉ
+spring:
+  cloud:
+    loadbalancer:
+      configurations: default
+    discovery:
+      client:
+        simple:
+          instances:
+            order-service:
+              - uri: http://order-service:8085

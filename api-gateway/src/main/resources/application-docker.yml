@@ -1,0 +1,11 @@
+# Docker Compose: 3 instance order-service, Spring Cloud LoadBalancer chia round-robin
+spring:
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            order-service:
+              - uri: http://order-service-1:8085
+              - uri: http://order-service-2:8085
+              - uri: http://order-service-3:8085

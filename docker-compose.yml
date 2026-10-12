@@ -1,0 +1,240 @@
+# DatDo Fishing - chạy local bằng Docker Desktop
+#   Chỉ hạ tầng (khi code trong IntelliJ):   docker compose up -d
+#   Toàn bộ hệ thống:                         docker compose --profile apps up -d --build
+name: datdofishing
+
+x-app-env: &app-env
+  SPRING_PROFILES_ACTIVE: docker
+  DB_HOST: mysql
+  REDIS_HOST: redis
+  KAFKA_BOOTSTRAP: kafka:9092
+  RABBIT_HOST: rabbitmq
+  MAIL_HOST: mailpit
+  AUTH_JWKS_URI: http://auth-service:8081/.well-known/jwks.json
+  CATALOG_URL: http://catalog-service:8082
+  INVENTORY_URL: http://inventory-service:8083
+  PROMOTION_URL: http://promotion-service:8086
+  JAVA_OPTS: "-Xms128m -Xmx320m -XX:+UseSerialGC"
+
+x-app: &app
+  profiles: ["apps"]
+  restart: unless-stopped
+  mem_limit: 512m
+  depends_on:
+    mysql: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    kafka: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+
+services:
+  # ---------------- HẠ TẦNG ----------------
+  mysql:
+    image: mysql:8.4
+    container_name: datdofishing-mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+      - --max-connections=300
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      TZ: UTC
+    ports: ["3306:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./infra/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # dùng TCP (127.0.0.1) để không báo healthy sớm khi MySQL còn đang chạy script khởi tạo
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: datdofishing-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: datdofishing-redis-insight
+    ports: ["5540:5540"]
+    volumes: [redisinsight-data:/data]
+    depends_on: [redis]
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: datdofishing-kafka
+    ports: ["9094:9094"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: datdofishing-kafka-ui
+    ports: ["8090:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: datdofishing-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka: { condition: service_healthy }
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: datdofishing-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: datdofishing
+      RABBITMQ_DEFAULT_PASS: 123456
+    ports: ["5672:5672", "15672:15672"]
+    volumes: [rabbit-data:/var/lib/rabbitmq]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: datdofishing-mailpit
+    ports: ["1025:1025", "8025:8025"]
+
+  # ---------------- MICROSERVICES ----------------
+  api-gateway:
+    <<: *app
+    build: { context: ., args: { MODULE: api-gateway } }
+    image: datdofishing/api-gateway:local
+    container_name: datdofishing-api-gateway
+    ports: ["8080:8080"]
+    environment:
+      <<: *app-env
+      AUTH_URI: http://auth-service:8081
+      CATALOG_URI: http://catalog-service:8082
+      INVENTORY_URI: http://inventory-service:8083
+      CART_URI: http://cart-service:8084
+      PROMOTION_URI: http://promotion-service:8086
+      CONTENT_URI: http://content-service:8087
+      NOTIFICATION_URI: http://notification-service:8088
+
+  auth-service:
+    <<: *app
+    build: { context: ., args: { MODULE: auth-service } }
+    image: datdofishing/auth-service:local
+    container_name: datdofishing-auth-service
+    ports: ["8081:8081"]
+    environment:
+      <<: *app-env
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@datdofishing.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
+
+  catalog-service:
+    <<: *app
+    build: { context: ., args: { MODULE: catalog-service } }
+    image: datdofishing/catalog-service:local
+    container_name: datdofishing-catalog-service
+    ports: ["8082:8082"]
+    environment: *app-env
+
+  inventory-service:
+    <<: *app
+    build: { context: ., args: { MODULE: inventory-service } }
+    image: datdofishing/inventory-service:local
+    container_name: datdofishing-inventory-service
+    ports: ["8083:8083"]
+    environment: *app-env
+
+  cart-service:
+    <<: *app
+    build: { context: ., args: { MODULE: cart-service } }
+    image: datdofishing/cart-service:local
+    container_name: datdofishing-cart-service
+    ports: ["8084:8084"]
+    environment: *app-env
+
+  # order-service chạy 3 instance, gateway chia tải bằng Spring Cloud LoadBalancer
+  order-service-1:
+    <<: *app
+    build: { context: ., args: { MODULE: order-service } }
+    image: datdofishing/order-service:local
+    container_name: datdofishing-order-service-1
+    environment:
+      <<: *app-env
+      INSTANCE_ID: order-1
+
+  order-service-2:
+    <<: *app
+    image: datdofishing/order-service:local
+    pull_policy: never
+    container_name: datdofishing-order-service-2
+    environment:
+      <<: *app-env
+      INSTANCE_ID: order-2
+
+  order-service-3:
+    <<: *app
+    image: datdofishing/order-service:local
+    pull_policy: never
+    container_name: datdofishing-order-service-3
+    environment:
+      <<: *app-env
+      INSTANCE_ID: order-3
+
+  promotion-service:
+    <<: *app
+    build: { context: ., args: { MODULE: promotion-service } }
+    image: datdofishing/promotion-service:local
+    container_name: datdofishing-promotion-service
+    ports: ["8086:8086"]
+    environment: *app-env
+
+  content-service:
+    <<: *app
+    build: { context: ., args: { MODULE: content-service } }
+    image: datdofishing/content-service:local
+    container_name: datdofishing-content-service
+    ports: ["8087:8087"]
+    environment: *app-env
+
+  notification-service:
+    <<: *app
+    build: { context: ., args: { MODULE: notification-service } }
+    image: datdofishing/notification-service:local
+    container_name: datdofishing-notification-service
+    ports: ["8088:8088"]
+    environment:
+      <<: *app-env
+      SHOP_URL: http://localhost:3000
+      ADMIN_URL: http://localhost:3001
+      PUBLIC_API_URL: http://localhost:8080
+
+volumes:
+  mysql-data:
+  redis-data:
+  redisinsight-data:
+  rabbit-data:

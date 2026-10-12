@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-service
+  labels: { app: catalog-service }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: catalog-service }
+  template:
+    metadata:
+      labels: { app: catalog-service }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: catalog-service
+          image: datdofishing/catalog-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef: { name: app-env }
+            - secretRef: { name: app-secret }
+          env:
+            - name: SERVER_PORT
+              value: "8082"
+          resources:
+            requests: { memory: "384Mi", cpu: "100m" }
+            limits: { memory: "512Mi" }
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8082 }
+            periodSeconds: 5
+            failureThreshold: 40
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8082 }
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8082 }
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service
+spec:
+  selector: { app: catalog-service }
+  ports:
+    - port: 8082
+      targetPort: 8082

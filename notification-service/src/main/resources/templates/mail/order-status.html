@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="vi">
+<head><meta charset="UTF-8"><title>Đơn hàng</title></head>
+<body style="margin:0;background:#f2f6f5;font-family:Arial,Helvetica,sans-serif;color:#0c2a33">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden">
+      <tr><td style="background:#0b3a47;color:#eaf5f4;padding:20px 28px;font-size:20px;font-weight:bold">DATDO FISHING</td></tr>
+      <tr><td style="padding:28px">
+        <p>Xin chào <b th:text="${fullName}">Khách hàng</b>,</p>
+        <p>Đơn hàng <b th:text="${code}">DD</b> của bạn: <b style="color:#f25c2a" th:text="${statusText}">Đã xác nhận</b></p>
+        <p th:if="${reason != null}" style="color:#4f656b">Ghi chú: <span th:text="${reason}">lý do</span></p>
+        <table cellpadding="8" style="width:100%;border-collapse:collapse;margin:16px 0">
+          <tr style="background:#f2f6f5"><td><b>Sản phẩm</b></td><td align="center"><b>SL</b></td><td align="right"><b>Đơn giá</b></td></tr>
+          <tr th:each="item : ${items}" style="border-bottom:1px solid #d3dfdd">
+            <td th:text="${item.name}">Cần câu</td>
+            <td align="center" th:text="${item.quantity}">1</td>
+            <td align="right" th:text="${item.price}">100.000₫</td>
+          </tr>
+        </table>
+        <p style="font-size:16px">Tổng thanh toán: <b th:text="${total}">0₫</b></p>
+        <p><a th:href="${orderUrl}" style="color:#1b7c8a">Xem chi tiết đơn hàng</a></p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

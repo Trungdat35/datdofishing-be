@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-service
+  labels: { app: cart-service }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cart-service }
+  template:
+    metadata:
+      labels: { app: cart-service }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: cart-service
+          image: datdofishing/cart-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+          envFrom:
+            - configMapRef: { name: app-env }
+            - secretRef: { name: app-secret }
+          env:
+            - name: SERVER_PORT
+              value: "8084"
+          resources:
+            requests: { memory: "384Mi", cpu: "100m" }
+            limits: { memory: "512Mi" }
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8084 }
+            periodSeconds: 5
+            failureThreshold: 40
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8084 }
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8084 }
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-service
+spec:
+  selector: { app: cart-service }
+  ports:
+    - port: 8084
+      targetPort: 8084
